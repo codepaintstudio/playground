@@ -3,7 +3,7 @@ AAA-pig
 
 > 这是一份示例。请复制为以自己 GitHub 用户名命名的文件，不要直接修改本文件。
 
-- GitHub：[@your-username](https://github.com/your-username)
+- GitHub:[@your-username](https://github.com/your-username)
 - 感兴趣的方向：前端 / 后端 / AI / 设计（可多选）
 - 目前接触过：写你用过的工具或做过的事情，没有基础也可以如实填写
 
@@ -20,7 +20,7 @@ AAA-pig
 ## 一个想问的问题
 在学习全栈开发中用到的的软件有哪些实用的小技巧？
 
-写下你对学习、协作或工作室的一个问题。
+写下你对学习，协作或工作室的一个问题。
 
 ## 作品或笔记（可选）
 
