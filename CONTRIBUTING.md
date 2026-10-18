@@ -86,3 +86,29 @@ git switch -c challenge/your-task
 ## 维护者操作
 
 个人介绍 PR 审核并合并后，向 PR 提交者的 GitHub 账号发送组织邀请。挑战与自由实验是可选练习，不作为邀请条件。
+
+这一步由 [.github/workflows/invite-contributor.yml](.github/workflows/invite-contributor.yml) 自动完成，规则是：
+
+- 触发时机：本仓库任意 PR 被合并时（对来自 fork 的 PR 同样生效），取 PR 作者账号为邀请对象。
+- 已是组织成员：只补 `all-members` team 归属，不重复发邀请。
+- 已有待接受的邀请：只补 team 归属，不重复发邀请。
+- 不是组织成员：发送组织邀请，并把 `all-members` team 一并写进邀请，对方接受后自动进入该 team。
+- 机器人账号（如 `dependabot[bot]`）会跳过。
+
+### 一次性配置
+
+1. 在组织里创建 `all-members` team（若尚未创建），用于容纳全部成员。
+2. 准备一个有组织管理权限的 Token，并要求它是组织 Owner，才能邀请非成员：
+   - Classic PAT：勾选 `admin:org`。
+   - Fine-grained PAT：Organization permissions 中 `Members` 设为 `Read and write`。
+3. 把 Token 存为 Secret，名称为 `ORG_ADMIN_TOKEN`。推荐存成**组织级 Secret** 并授权本仓库访问，这样和 [codepaintstudio/.github](https://github.com/codepaintstudio/.github) 的定时同步共用一份。
+4. 该 workflow 使用 `pull_request_target`，必须存在于默认分支上才会对合并事件生效——也就是说，本文件合并进 `main` 之后才开始工作。
+
+### 手动补发
+
+邀请失败或遗漏时，到 Actions 里手动运行 **Invite contributor**：
+
+- `username`：要邀请的 GitHub 用户名。
+- `dry_run` 设为 `true` 可以只查看当前成员状态、不做任何修改。
+
+组织成员与 `all-members` team 的最终一致性由 [codepaintstudio/.github](https://github.com/codepaintstudio/.github) 的每日同步任务兜底；本 workflow 只负责在合并的那一刻尽快发出邀请。因此**邀请与 team 同步的逻辑放在本仓库**（只有本仓库能收到这里的 PR 合并事件），而组织级的批量对账放在 `.github` 仓库。

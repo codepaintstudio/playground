@@ -1,0 +1,164 @@
+name: Invite contributor
+
+# 新人提交的 PR 被合并后，把 PR 作者邀请进组织，并加入 all-members team。
+#
+# 触发方式：
+#   - pull_request_target / closed：PR 合并时自动执行（对 fork 的 PR 同样生效）
+#   - workflow_dispatch：手动补发邀请，用于邀请失败或遗漏时的重试
+#
+# 安全约定：本 workflow 使用 pull_request_target，可以访问仓库 Secret，因此
+# 只通过 API 操作用户，绝不允许 checkout 或执行 PR 里的代码。
+
+on:
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      username:
+        description: 要邀请的 GitHub 用户名（手动重试用）
+        required: true
+        type: string
+      dry_run:
+        description: 只查看当前状态，不做任何修改
+        required: false
+        default: false
+        type: boolean
+
+# 不需要 GITHUB_TOKEN 的任何权限，所有操作都走 ORG_ADMIN_TOKEN。
+permissions: {}
+
+concurrency:
+  group: invite-contributor-${{ github.event.pull_request.user.login || inputs.username }}
+  cancel-in-progress: false
+
+jobs:
+  invite:
+    name: Invite ${{ github.event.pull_request.user.login || inputs.username }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Invite to organization and all-members team
+        uses: actions/github-script@v9
+        env:
+          ORG_ADMIN_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+          ORG: codepaintstudio
+          TEAM_SLUG: all-members
+        with:
+          github-token: ${{ secrets.ORG_ADMIN_TOKEN }}
+          script: |
+            const org = process.env.ORG
+            const teamSlug = process.env.TEAM_SLUG
+
+            if (!process.env.ORG_ADMIN_TOKEN) {
+              core.setFailed(
+                '缺少 ORG_ADMIN_TOKEN。请在仓库 Settings → Secrets and variables → Actions ' +
+                '中添加该 Secret，或让组织级同名 Secret 对本仓库开放访问。'
+              )
+              return
+            }
+
+            // 被邀请人：PR 作者，手动触发时取输入的用户名。
+            const username = (
+              context.eventName === 'workflow_dispatch'
+                ? context.payload.inputs?.username
+                : context.payload.pull_request?.user?.login
+            )?.trim()
+
+            const dryRun =
+              context.eventName === 'workflow_dispatch' &&
+              String(context.payload.inputs?.dry_run) === 'true'
+
+            if (!username) {
+              core.setFailed('没有找到要邀请的 GitHub 用户名。')
+              return
+            }
+
+            // Bot 账号无法加入组织，直接跳过（例如 dependabot[bot]）。
+            if (username.endsWith('[bot]')) {
+              core.notice(`跳过 @${username}：机器人账号不能加入组织。`)
+              return
+            }
+
+            let team
+            try {
+              team = (await github.rest.teams.getByName({ org, team_slug: teamSlug })).data
+            } catch (error) {
+              core.setFailed(`读取 team ${org}/${teamSlug} 失败（${error.status}）：${error.message}`)
+              return
+            }
+
+            async function membershipState(login) {
+              try {
+                const { data } = await github.rest.orgs.getMembershipForUser({ org, username: login })
+                return data.state // 'active' | 'pending'
+              } catch (error) {
+                if (error.status === 404) return 'none'
+                throw error
+              }
+            }
+
+            async function ensureTeamMembership(login) {
+              try {
+                const { data } = await github.rest.teams.addOrUpdateMembershipForUserInOrg({
+                  org,
+                  team_slug: teamSlug,
+                  username: login,
+                  role: 'member',
+                })
+                return data.state // 'active' | 'pending'
+              } catch (error) {
+                if (error.status === 422) {
+                  core.warning(`无法设置 @${login} 的 team 归属：${error.message}`)
+                  return 'unresolved'
+                }
+                throw error
+              }
+            }
+
+            const state = await membershipState(username)
+            core.info(`@${username} 的组织成员状态：「${state}」。`)
+
+            let result
+
+            if (state === 'active') {
+              // 已是组织成员：只保证在 all-members team 里（幂等）。
+              const teamState = dryRun ? 'unchanged' : await ensureTeamMembership(username)
+              result = `已是组织成员，team 状态为「${teamState}」`
+            } else if (state === 'pending') {
+              // 已有待接受的邀请：补上 team 归属，不再重复发邀请。
+              const teamState = dryRun ? 'unchanged' : await ensureTeamMembership(username)
+              result = `已有待接受的邀请，team 状态为「${teamState}」`
+            } else if (dryRun) {
+              result = `将邀请加入 ${org} 并加入 team ${teamSlug}`
+            } else {
+              const { data: user } = await github.rest.users.getByUsername({ username })
+              try {
+                // team_ids 让「组织邀请」与「team 归属」一次完成；
+                // 对方接受邀请后即成为组织成员并进入 all-members。
+                await github.rest.orgs.createInvitation({
+                  org,
+                  invitee_id: user.id,
+                  role: 'direct_member',
+                  team_ids: [team.id],
+                })
+                result = `已邀请加入 ${org} 并加入 team ${teamSlug}`
+              } catch (error) {
+                // 常见于并发或状态已变化（例如对方刚被邀请/刚加入）。
+                if (error.status !== 422) throw error
+                const teamState = await ensureTeamMembership(username)
+                result = `邀请被拒绝（${error.message}），改为补 team 归属，状态为「${teamState}」`
+              }
+            }
+
+            core.notice(`@${username}：${result}。`)
+
+            await core.summary
+              .addHeading('新人邀请', 2)
+              .addTable([
+                [{ data: '用户', header: true }, { data: `@${username}` }],
+                [{ data: '组织', header: true }, { data: org }],
+                [{ data: 'Team', header: true }, { data: `${teamSlug} (#${team.id})` }],
+                [{ data: '结果', header: true }, { data: result }],
+                ...(dryRun ? [[{ data: '模式', header: true }, { data: 'dry run' }]] : []),
+              ])
+              .write()
