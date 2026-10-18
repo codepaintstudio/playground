@@ -89,7 +89,9 @@ git switch -c challenge/your-task
 
 这一步由 [.github/workflows/invite-contributor.yml](.github/workflows/invite-contributor.yml) 自动完成，规则是：
 
-- 触发时机：本仓库任意 PR 被合并时（对来自 fork 的 PR 同样生效），取 PR 作者账号为邀请对象。
+- 触发时机：本仓库的 PR 被合并时（对来自 fork 的 PR 同样生效），取 PR 作者账号为邀请对象。
+- 邀请范围：只有 PR 改动了 `members/` 下的个人介绍文件才会邀请。`members/README.md` 与 `members/example.md` 是仓库脚手架，不算个人介绍。因此挑战与自由实验的 PR 合并后不会发邀请，与「个人介绍 PR 才发邀请」的规则一致。
+- 例外：手动运行 workflow 不受上面的范围限制，用于补发遗漏的邀请。
 - 已是组织成员：只补 `all-members` team 归属，不重复发邀请。
 - 已有待接受的邀请：只补 team 归属，不重复发邀请。
 - 不是组织成员：发送组织邀请，并把 `all-members` team 一并写进邀请，对方接受后自动进入该 team。

@@ -3,8 +3,8 @@ name: Invite contributor
 # 新人提交的 PR 被合并后，把 PR 作者邀请进组织，并加入 all-members team。
 #
 # 触发方式：
-#   - pull_request_target / closed：PR 合并时自动执行（对 fork 的 PR 同样生效）
-#   - workflow_dispatch：手动补发邀请，用于邀请失败或遗漏时的重试
+#   - pull_request_target / closed：个人介绍 PR 合并时自动执行（对 fork 的 PR 同样生效）
+#   - workflow_dispatch：手动补发邀请，用于邀请失败或遗漏时的重试，不受介绍文件限制
 #
 # 安全约定：本 workflow 使用 pull_request_target，可以访问仓库 Secret，因此
 # 只通过 API 操作用户，绝不允许 checkout 或执行 PR 里的代码。
@@ -77,6 +77,38 @@ jobs:
             if (username.endsWith('[bot]')) {
               core.notice(`跳过 @${username}：机器人账号不能加入组织。`)
               return
+            }
+
+            // 只有改动 members/ 下个人介绍文件的 PR 才发邀请；
+            // members/README.md 与 members/example.md 是仓库脚手架，不算个人介绍。
+            // 手动触发（workflow_dispatch）不受此限制，作为补发入口。
+            if (context.eventName !== 'workflow_dispatch') {
+              const pullNumber = context.payload.pull_request.number
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullNumber,
+                per_page: 100,
+              })
+
+              const introFiles = files
+                .map((file) => file.filename)
+                .filter(
+                  (name) =>
+                    /^members\/.+\.md$/.test(name) &&
+                    name !== 'members/README.md' &&
+                    name !== 'members/example.md'
+                )
+
+              if (introFiles.length === 0) {
+                core.notice(
+                  `PR #${pullNumber} 没有改动 members/ 下的个人介绍，跳过邀请。` +
+                    '按贡献指南，组织邀请只发给个人介绍 PR；确需补发请手动运行本 workflow。'
+                )
+                return
+              }
+
+              core.info(`检测到个人介绍改动：${introFiles.join(', ')}`)
             }
 
             let team
