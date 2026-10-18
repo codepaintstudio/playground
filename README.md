@@ -51,7 +51,7 @@ playground/
 
 请使用准备加入组织的 GitHub 账号提交 PR，个人介绍中的用户名也填写该账号。我们以 PR 提交者的账号为邀请对象。
 
-PR 合并后由 [邀请流程](.github/workflows/invite-contributor.yml) 自动执行：如果作者还不是组织成员，会立即发送组织邀请并预先加入 `all-members` team。接受邀请后即成为组织成员，同时出现在所有成员名单里。如果长时间没有收到邀请邮件，请到 GitHub 的 [组织邀请页面](https://github.com/account/organizations) 查看，或在 Issue 中留言请负责人手动补发。
+个人介绍 PR 合并后由 [邀请流程](.github/workflows/invite-contributor.yml) 自动执行：如果作者还不是组织成员，会立即发送组织邀请并预先加入 `all-members` team。接受邀请后即成为组织成员，同时出现在所有成员名单里。只有改动了 `members/` 下个人介绍文件的 PR 才会触发，挑战与自由实验的 PR 不在此列。如果长时间没有收到邀请邮件，请到 GitHub 的 [组织邀请页面](https://github.com/account/organizations) 查看，或在 Issue 中留言请负责人手动补发。
 
 ## 参与约定
 
